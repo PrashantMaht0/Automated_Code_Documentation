@@ -21,10 +21,40 @@ const mockCommitRows = [
 export default function Dashboard({ activeProject }) {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const projectName = activeProject?.repo_name || 'Select a Project';
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [newSecret, setNewSecret] = useState('');
+  const [isUpdatingSecret, setIsUpdatingSecret] = useState(false);
 
   const truncateMessage = (message, maxLength = 72) => {
     if (!message) return '';
     return message.length > maxLength ? `${message.slice(0, maxLength).trimEnd()}...` : message;
+  };
+
+  const handleUpdateSecret = async () => {
+    if (!newSecret.trim() || !activeProject) return;
+    setIsUpdatingSecret(true);
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/projects/${activeProject.id}/secret`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' }, // Using text/plain since we are just sending a string
+        body: newSecret
+      });
+
+      if (!response.ok) throw new Error("Failed to update secret");
+      
+      alert("Webhook secret updated successfully!");
+      setIsSettingsOpen(false);
+      setNewSecret('');
+      
+      // Note: In a full app, you might want to trigger a re-fetch of the projects here
+      // so the activeProject state gets the updated secret.
+    } catch (error) {
+      console.error("Error updating secret:", error);
+      alert("Failed to update webhook secret.");
+    } finally {
+      setIsUpdatingSecret(false);
+    }
   };
 
   return (
@@ -52,7 +82,9 @@ export default function Dashboard({ activeProject }) {
               Generate
             </button>
 
-            <button className="p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition">
+            <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition">
               <Settings size={20} />
             </button>
           </div>
@@ -115,6 +147,49 @@ export default function Dashboard({ activeProject }) {
               placeholder="Ask Gemini to summarize..." 
               className="w-full bg-gray-100 dark:bg-gray-900 border-none rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
             />
+          </div>
+        </div>
+      )}
+
+      {/* SETTINGS MODAL */}
+      {isSettingsOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Project Settings</h3>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Update Webhook Secret
+              </label>
+              <input
+                type="password"
+                placeholder="Enter new GitHub webhook secret"
+                value={newSecret}
+                onChange={(e) => setNewSecret(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUpdateSecret}
+                disabled={isUpdatingSecret}
+                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-50"
+              >
+                {isUpdatingSecret ? 'Updating...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </div>
       )}
