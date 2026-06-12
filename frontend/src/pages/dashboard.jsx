@@ -1,9 +1,31 @@
 import React, { useState } from 'react';
 import { Search, Sparkles, Settings, X } from 'lucide-react';
 
+const mockCommitRows = [
+  {
+    commitId: 'a1b2c3d4e5f678901234567890abcdef12345678',
+    author: 'octocat',
+    message: 'Refactored the authentication state management and cleaned up the session handling flow.',
+    date: 'Oct 24, 2025',
+    aiSummary: '',
+  },
+  {
+    commitId: 'f9e8d7c6b5a432109876543210fedcba98765432',
+    author: 'dev-team',
+    message: 'Updated Tailwind configurations for dark mode support across the dashboard layout.',
+    date: 'Oct 23, 2025',
+    aiSummary: '',
+  },
+];
+
 export default function Dashboard({ activeProject }) {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const projectName = activeProject?.repo_name || 'Select a Project';
+
+  const truncateMessage = (message, maxLength = 72) => {
+    if (!message) return '';
+    return message.length > maxLength ? `${message.slice(0, maxLength).trimEnd()}...` : message;
+  };
 
   return (
     <div className="relative h-full flex">
@@ -41,27 +63,33 @@ export default function Dashboard({ activeProject }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
+                <th className="p-4 font-medium">Commit ID</th>
+                <th className="p-4 font-medium">Author</th>
+                <th className="p-4 font-medium">Message</th>
                 <th className="p-4 font-medium">Date</th>
-                <th className="p-4 font-medium">Commits</th>
                 <th className="p-4 font-medium">AI Summary</th>
-                <th className="p-4 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-gray-800 dark:text-gray-200">
-              {/* Row 1 */}
-              <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                <td className="p-4 whitespace-nowrap">Oct 24, 2025</td>
-                <td className="p-4"><span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">a1b2c3d</span></td>
-                <td className="p-4">Refactored the authentication state management.</td>
-                <td className="p-4"><button className="text-blue-500 hover:underline">View</button></td>
-              </tr>
-              {/* Row 2 */}
-              <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                <td className="p-4 whitespace-nowrap">Oct 23, 2025</td>
-                <td className="p-4"><span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">f9e8d7c</span></td>
-                <td className="p-4">Updated Tailwind configurations for dark mode.</td>
-                <td className="p-4"><button className="text-blue-500 hover:underline">View</button></td>
-              </tr>
+              {mockCommitRows.map((row) => (
+                <tr key={row.commitId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                  <td className="p-4 whitespace-nowrap">
+                    <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">
+                      {row.commitId.slice(0, 7)}
+                    </span>
+                  </td>
+                  <td className="p-4 whitespace-nowrap">{row.author}</td>
+                  <td className="p-4">
+                    <span className="block max-w-xl truncate" title={row.message}>
+                      {truncateMessage(row.message)}
+                    </span>
+                  </td>
+                  <td className="p-4 whitespace-nowrap">{row.date}</td>
+                  <td className="p-4 whitespace-nowrap text-gray-400 dark:text-gray-500">
+                    {row.aiSummary}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen, PlusCircle, Search, ArrowRight, ShieldAlert } from 'lucide-react';
+import { FolderOpen, PlusCircle, Search, ArrowRight, Loader2 } from 'lucide-react';
+import { supabase } from '../services/supabase'; // Import Supabase to get the user ID
 
 export default function Home({ projects, setProjects, setActiveProject }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // New loading state
   
   // Form input bindings
   const [newRepoName, setNewRepoName] = useState('');
@@ -20,19 +22,61 @@ export default function Home({ projects, setProjects, setActiveProject }) {
     navigate('/dashboard');
   };
 
-  const handleCreateSubmit = (e) => {
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
     if (!newRepoName.trim()) return;
+    
+    setIsSubmitting(true);
 
-    const newProject = {
-      id: Date.now().toString(), // Mock unique identifier string
-      repo_name: newRepoName,
-      webhook_secret: newSecret || 'wh_generated_' + Math.random().toString(36).substring(7)
-    };
+    try {
+      // 1. Get the current authenticated user from Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("No authenticated user found.");
+      }
 
-    setProjects([...projects, newProject]);
-    setActiveProject(newProject);
-    navigate('/dashboard');
+      // 2. Build the payload matching our Spring Boot DTO
+      const payload = {
+        userId: user.id,
+        email: user.email,
+        repoName: newRepoName,
+        webhookSecret: newSecret || 'wh_generated_' + Math.random().toString(36).substring(7)
+      };
+
+      // 3. Send the HTTP POST request to Spring Boot
+      const response = await fetch('http://localhost:8080/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.status === 409) {
+        alert("You are already tracking this repository.");
+        setIsSubmitting(false);
+        return; 
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to create project on the server.');
+      }
+
+      // 4. Parse the newly saved database row
+      const savedProject = await response.json();
+
+      // 5. Update React state and navigate
+      setProjects([...projects, savedProject]);
+      setActiveProject(savedProject);
+      navigate('/dashboard');
+
+    } catch (error) {
+      console.error("Error saving project:", error);
+      alert("Failed to save pipeline configuration. Check console for details.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -139,15 +183,18 @@ export default function Home({ projects, setProjects, setActiveProject }) {
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="flex-1 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-sm"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Confirm Hook
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {isSubmitting ? 'Provisioning...' : 'Confirm Hook'}
                 </button>
               </div>
             </form>

@@ -30,6 +30,31 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const fetchProjects = async () => {
+      // Only attempt to fetch if we have a securely authenticated user
+      if (session && session.user) {
+        try {
+          const response = await fetch(`http://localhost:8080/api/projects/user/${session.user.id}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            setProjects(data); // Populate the sidebar!
+          } else {
+            console.error("Failed to fetch projects from the server.");
+          }
+        } catch (error) {
+          console.error("Error communicating with Spring Boot:", error);
+        }
+      } else {
+        // If the user logs out, clear the sidebar
+        setProjects([]);
+      }
+    };
+
+    fetchProjects();
+  }, [session]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-500">
