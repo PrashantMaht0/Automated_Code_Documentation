@@ -1,34 +1,45 @@
-import React, { useState } from 'react';
-import { Search, Sparkles, Settings, X } from 'lucide-react';
-
-const mockCommitRows = [
-  {
-    commitId: 'a1b2c3d4e5f678901234567890abcdef12345678',
-    author: 'octocat',
-    message: 'Refactored the authentication state management and cleaned up the session handling flow.',
-    date: 'Oct 24, 2025',
-    aiSummary: '',
-  },
-  {
-    commitId: 'f9e8d7c6b5a432109876543210fedcba98765432',
-    author: 'dev-team',
-    message: 'Updated Tailwind configurations for dark mode support across the dashboard layout.',
-    date: 'Oct 23, 2025',
-    aiSummary: '',
-  },
-];
+import React, { useState, useEffect } from 'react';
+import { Search, Sparkles, Settings, X, Loader2 } from 'lucide-react';
 
 export default function Dashboard({ activeProject }) {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const projectName = activeProject?.repo_name || 'Select a Project';
+  
+  // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [newSecret, setNewSecret] = useState('');
   const [isUpdatingSecret, setIsUpdatingSecret] = useState(false);
 
-  const truncateMessage = (message, maxLength = 72) => {
-    if (!message) return '';
-    return message.length > maxLength ? `${message.slice(0, maxLength).trimEnd()}...` : message;
-  };
+  // Dynamic Logs State
+  const [logs, setLogs] = useState([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  // --- NEW: View Commit Modal State ---
+  const [selectedCommit, setSelectedCommit] = useState(null);
+
+  // Fetch logs whenever the active project changes
+  useEffect(() => {
+    const fetchLogs = async () => {
+      if (!activeProject) return;
+      
+      setIsLoadingLogs(true);
+      try {
+        const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setLogs(data);
+        } else {
+          console.error("Failed to fetch logs");
+        }
+      } catch (error) {
+        console.error("Error fetching logs:", error);
+      } finally {
+        setIsLoadingLogs(false);
+      }
+    };
+
+    fetchLogs();
+  }, [activeProject]);
 
   const handleUpdateSecret = async () => {
     if (!newSecret.trim() || !activeProject) return;
@@ -37,7 +48,7 @@ export default function Dashboard({ activeProject }) {
     try {
       const response = await fetch(`http://localhost:8080/api/projects/${activeProject.id}/secret`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'text/plain' }, // Using text/plain since we are just sending a string
+        headers: { 'Content-Type': 'text/plain' },
         body: newSecret
       });
 
@@ -46,9 +57,6 @@ export default function Dashboard({ activeProject }) {
       alert("Webhook secret updated successfully!");
       setIsSettingsOpen(false);
       setNewSecret('');
-      
-      // Note: In a full app, you might want to trigger a re-fetch of the projects here
-      // so the activeProject state gets the updated secret.
     } catch (error) {
       console.error("Error updating secret:", error);
       alert("Failed to update webhook secret.");
@@ -83,45 +91,70 @@ export default function Dashboard({ activeProject }) {
             </button>
 
             <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition">
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
+            >
               <Settings size={20} />
             </button>
           </div>
         </div>
 
-        {/* Logs Table (Mocked Structure) */}
+        {/* Dynamic Logs Table */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
-                <th className="p-4 font-medium">Commit ID</th>
-                <th className="p-4 font-medium">Author</th>
+                <th className="p-4 font-medium w-24">Hash</th>
+                <th className="p-4 font-medium w-32">Author</th>
                 <th className="p-4 font-medium">Message</th>
-                <th className="p-4 font-medium">Date</th>
-                <th className="p-4 font-medium">AI Summary</th>
+                <th className="p-4 font-medium w-48">Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-gray-800 dark:text-gray-200">
-              {mockCommitRows.map((row) => (
-                <tr key={row.commitId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                  <td className="p-4 whitespace-nowrap">
-                    <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">
-                      {row.commitId.slice(0, 7)}
-                    </span>
-                  </td>
-                  <td className="p-4 whitespace-nowrap">{row.author}</td>
-                  <td className="p-4">
-                    <span className="block max-w-xl truncate" title={row.message}>
-                      {truncateMessage(row.message)}
-                    </span>
-                  </td>
-                  <td className="p-4 whitespace-nowrap">{row.date}</td>
-                  <td className="p-4 whitespace-nowrap text-gray-400 dark:text-gray-500">
-                    {row.aiSummary}
+              {isLoadingLogs ? (
+                <tr>
+                  <td colSpan="4" className="p-8 text-center text-gray-400">
+                    <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+                    Fetching repository logs...
                   </td>
                 </tr>
-              ))}
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="p-8 text-center text-gray-400">
+                    No commit logs recorded yet. Push code to GitHub to see it here!
+                  </td>
+                </tr>
+              ) : (
+                logs.map((log) => {
+                  const dateObj = new Date(log.commitTimestamp);
+                  const formattedDate = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                  return (
+                    <tr 
+                      key={log.id} 
+                      onClick={() => setSelectedCommit(log)}
+                      className="cursor-pointer hover:bg-blue-50 dark:hover:bg-gray-700/50 transition"
+                    >
+                      <td className="p-4 whitespace-nowrap">
+                        <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono text-gray-600 dark:text-gray-300">
+                          {log.commitHash.slice(0, 7)}
+                        </span>
+                      </td>
+                      <td className="p-4 whitespace-nowrap font-medium text-sm">
+                        {log.author}
+                      </td>
+                      <td className="p-4">
+                        <span className="block max-w-xl truncate text-sm text-gray-600 dark:text-gray-300" title={log.message}>
+                          {log.message}
+                        </span>
+                      </td>
+                      <td className="p-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {formattedDate}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -189,6 +222,80 @@ export default function Dashboard({ activeProject }) {
               >
                 {isUpdatingSecret ? 'Updating...' : 'Save Changes'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- NEW: VIEW COMMIT MODAL --- */}
+      {selectedCommit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 md:p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-gray-200 dark:border-gray-700 overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-start p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                  Commit Details
+                </h3>
+                <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                  <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded font-mono">
+                    {selectedCommit.commitHash.slice(0, 7)}
+                  </span>
+                  <span>by <span className="font-medium text-gray-700 dark:text-gray-300">{selectedCommit.author}</span></span>
+                  <span>•</span>
+                  <span>{new Date(selectedCommit.commitTimestamp).toLocaleString()}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedCommit(null)} 
+                className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Scrollable Content Body */}
+            <div className="flex-1 p-6 overflow-y-auto">
+              
+              <div className="mb-8">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 uppercase tracking-wider">Commit Message</h4>
+                <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border border-gray-100 dark:border-gray-800">
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap text-sm">
+                    {selectedCommit.message}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 uppercase tracking-wider">File Changes</h4>
+                
+                {/* Syntax Highlighted Raw Diff */}
+                <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs md:text-sm text-gray-300 shadow-inner border border-gray-700 overflow-x-auto">
+                  {selectedCommit.rawDiff && selectedCommit.rawDiff !== "Diff unavailable or repository is private." ? (
+                    <pre className="whitespace-pre-wrap">
+                      {selectedCommit.rawDiff.split('\n').map((line, index) => {
+                        let textColor = "text-gray-300";
+                        if (line.startsWith('+') && !line.startsWith('+++')) textColor = "text-green-400";
+                        if (line.startsWith('-') && !line.startsWith('---')) textColor = "text-red-400";
+                        if (line.startsWith('@@')) textColor = "text-blue-400";
+                        
+                        return (
+                          <div key={index} className={textColor}>
+                            {line}
+                          </div>
+                        );
+                      })}
+                    </pre>
+                  ) : (
+                    <div className="text-center text-gray-500 py-8">
+                      <p>Raw code diffs are not available for this commit.</p>
+                      <p className="text-xs mt-2">Make sure your repo is public, or supply a GitHub token in the backend.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
