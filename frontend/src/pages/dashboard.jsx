@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Sparkles, Settings, X, Loader2 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 export default function Dashboard({ activeProject }) {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
@@ -14,31 +15,67 @@ export default function Dashboard({ activeProject }) {
   const [logs, setLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
-  // --- NEW: View Commit Modal State ---
+  // View Commit Modal State
   const [selectedCommit, setSelectedCommit] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const isSearchingRef = React.useRef(false);
 
-  // Fetch logs whenever the active project changes
+  // --- AI Chat State ---
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatScrollRef = React.useRef(null); // Keeps chat scrolled to bottom
+
   useEffect(() => {
-    const fetchLogs = async () => {
+    setSearchQuery('');
+    isSearchingRef.current = false;
+    setSelectedCommit(null);
+
+    let intervalId = null;
+
+    const fetchLogs = async (isBackground = false) => {
       if (!activeProject) return;
+      if (isBackground && isSearchingRef.current) return;
       
-      setIsLoadingLogs(true);
+      if (!isBackground) {
+        setLogs([]); 
+        setIsLoadingLogs(true);
+      }
+
       try {
         const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`);
         if (response.ok) {
           const data = await response.json();
           setLogs(data);
+
+          const hasPendingSummaries = data.some(log => !log.aiSummary);
+
+          if (hasPendingSummaries && !intervalId) {
+            intervalId = setInterval(() => {
+              fetchLogs(true); // Call recursively in background
+            }, 3000); // Check every 3 seconds
+          } 
+          else if (!hasPendingSummaries && intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
         } else {
           console.error("Failed to fetch logs");
         }
       } catch (error) {
         console.error("Error fetching logs:", error);
       } finally {
-        setIsLoadingLogs(false);
+        if (!isBackground) setIsLoadingLogs(false);
       }
     };
 
     fetchLogs();
+
+    // Clean up the interval if the user switches projects or leaves the page
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [activeProject]);
 
   const handleUpdateSecret = async () => {
@@ -65,6 +102,126 @@ export default function Dashboard({ activeProject }) {
     }
   };
 
+  const handleSmartSearch = async (e) => {
+    e.preventDefault();
+    if (!activeProject) return;
+    
+    if (!searchQuery.trim()) {
+      clearSearch();
+      return;
+    }
+
+    isSearchingRef.current = true; 
+    setIsLoadingLogs(true);
+    setLogs([]); // Clear logs while searching
+    try {
+      const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}/search?query=${encodeURIComponent(searchQuery)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data); 
+      }
+    } catch (error) {
+      console.error("Search failed:", error);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const clearSearch = async () => {
+    setSearchQuery('');
+    isSearchingRef.current = false;
+    setIsLoadingLogs(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`);
+      if (response.ok) {
+        setLogs(await response.json());
+      }
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  // 1. Fetch chat history whenever the sidebar is opened
+  useEffect(() => {
+    if (isAiSidebarOpen && activeProject) {
+      fetch(`http://localhost:8080/api/chat/project/${activeProject.id}`)
+        .then(res => res.json())
+        .then(data => setChatMessages(data))
+        .catch(err => console.error("Failed to load chat history:", err));
+    }
+  }, [isAiSidebarOpen, activeProject]);
+
+  // 2. Keep chat scrolled to the bottom
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, isChatLoading]);
+
+  // 3. Send a message to the backend
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !activeProject) return;
+
+    const userText = chatInput;
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'USER', content: userText }]);
+    setIsChatLoading(true);
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/chat/project/${activeProject.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: userText
+      });
+      
+      if (response.ok) {
+        const aiResponseText = await response.text();
+        setChatMessages(prev => [...prev, { role: 'ASSISTANT', content: aiResponseText }]);
+      }
+    } catch (error) {
+      console.error("Chat failed:", error);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  // 4. Download Markdown Report
+  const handleDownloadReport = (content) => {
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AI-Report-${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = (content) => {
+    const doc = new jsPDF();
+    
+    // Set standard font and size
+    doc.setFont("helvetica");
+    doc.setFontSize(11);
+    
+    // Split the markdown text to fit within the PDF width
+    const splitText = doc.splitTextToSize(content, 180);
+    
+    let yPosition = 15; // Starting vertical position
+    
+    // Loop through the text lines to handle multi-page overflow
+    for (let i = 0; i < splitText.length; i++) {
+      if (yPosition > 280) { // If we hit the bottom of the A4 page
+        doc.addPage();
+        yPosition = 15; // Reset to top
+      }
+      doc.text(splitText[i], 15, yPosition);
+      yPosition += 6; // Line height spacing
+    }
+    
+    doc.save(`AI-Report-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="relative h-full flex">
       {/* MAIN DASHBOARD CONTENT */}
@@ -77,10 +234,26 @@ export default function Dashboard({ activeProject }) {
           </h1>
           
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-              <Search size={16} />
-              Smart Search
-            </button>
+            {/* NEW: Smart Search Form */}
+            <form onSubmit={handleSmartSearch} className="flex items-center relative">
+              <input 
+                type="text"
+                placeholder="Semantic search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-8 py-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition"
+              />
+              <Search size={16} className="absolute left-3 text-gray-400" />
+              {searchQuery && (
+                <button 
+                  type="button" 
+                  onClick={() => { setSearchQuery(''); window.location.reload(); }} 
+                  className="absolute right-3 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </form>
             
             <button 
               onClick={() => setIsAiSidebarOpen(true)}
@@ -106,21 +279,22 @@ export default function Dashboard({ activeProject }) {
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
                 <th className="p-4 font-medium w-24">Hash</th>
                 <th className="p-4 font-medium w-32">Author</th>
-                <th className="p-4 font-medium">Message</th>
-                <th className="p-4 font-medium w-48">Date</th>
+                <th className="p-4 font-medium w-48">Commit Message</th>
+                <th className="p-4 font-medium">AI Summary</th>
+                <th className="p-4 font-medium w-40">Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-gray-800 dark:text-gray-200">
               {isLoadingLogs ? (
                 <tr>
-                  <td colSpan="4" className="p-8 text-center text-gray-400">
+                  <td colSpan="5" className="p-8 text-center text-gray-400">
                     <Loader2 size={24} className="animate-spin mx-auto mb-2" />
                     Fetching repository logs...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="p-8 text-center text-gray-400">
+                  <td colSpan="5" className="p-8 text-center text-gray-400">
                     No commit logs recorded yet. Push code to GitHub to see it here!
                   </td>
                 </tr>
@@ -144,8 +318,13 @@ export default function Dashboard({ activeProject }) {
                         {log.author}
                       </td>
                       <td className="p-4">
-                        <span className="block max-w-xl truncate text-sm text-gray-600 dark:text-gray-300" title={log.message}>
+                        <span className="block max-w-[200px] truncate text-sm text-gray-600 dark:text-gray-300" title={log.message}>
                           {log.message}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className="block max-w-sm text-sm font-medium text-gray-600 dark:text-gray-300" title={log.aiSummary}>
+                          {log.aiSummary || "Generating..."}
                         </span>
                       </td>
                       <td className="p-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
@@ -160,26 +339,80 @@ export default function Dashboard({ activeProject }) {
         </div>
       </div>
 
-      {/* RIGHT AI SLIDEBAR (Hidden by default) */}
+      {/* RIGHT AI SLIDEBAR */}
       {isAiSidebarOpen && (
-        <div className="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-xl flex flex-col">
+        <div className="w-96 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-2xl flex flex-col absolute right-0 top-0 bottom-0 z-40 transition-transform transform translate-x-0">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20">
             <h3 className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-2">
-              <Sparkles size={16} /> Gemini Assistant
+              <Sparkles size={16} /> Gemini
             </h3>
-            <button onClick={() => setIsAiSidebarOpen(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white">
+            <button onClick={() => setIsAiSidebarOpen(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white transition">
               <X size={20} />
             </button>
           </div>
-          <div className="flex-1 p-4 overflow-y-auto text-gray-600 dark:text-gray-300 text-sm">
-            AI Chat interface will go here...
+          
+          {/* Chat Messages Area */}
+          <div ref={chatScrollRef} className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
+            {chatMessages.length === 0 && !isChatLoading && (
+              <div className="text-center text-sm text-gray-500 mt-10">
+                Ask Gemini to generate a weekly summary, explain a commit, or write documentation based on your code!
+              </div>
+            )}
+            
+            {chatMessages.map((msg, index) => (
+              <div key={index} className={`flex flex-col ${msg.role === 'USER' ? 'items-end' : 'items-start'}`}>
+                <div className={`max-w-[85%] rounded-lg p-3 text-sm shadow-sm ${msg.role === 'USER' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}>
+                  <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                </div>
+                {/* Show Download Buttons for AI Reports */}
+                {msg.role === 'ASSISTANT' && msg.content.length > 100 && (
+                  <div className="flex gap-4 mt-2 ml-1">
+                    <button 
+                      onClick={() => handleDownloadReport(msg.content)}
+                      className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition"
+                    >
+                      ↓ Download .md
+                    </button>
+                    <button 
+                      onClick={() => handleDownloadPdf(msg.content)}
+                      className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium transition"
+                    >
+                      ↓ Download .pdf
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {isChatLoading && (
+              <div className="flex items-start">
+                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 flex gap-2 items-center text-gray-500">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-sm">Analyzing commits...</span>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <input 
-              type="text" 
-              placeholder="Ask Gemini to summarize..." 
-              className="w-full bg-gray-100 dark:bg-gray-900 border-none rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
-            />
+
+          {/* Chat Input Area */}
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <input 
+                type="text" 
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask about your codebase..." 
+                disabled={isChatLoading}
+                className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-white disabled:opacity-50 transition"
+              />
+              <button 
+                type="submit"
+                disabled={isChatLoading || !chatInput.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition disabled:opacity-50"
+              >
+                Send
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -257,6 +490,20 @@ export default function Dashboard({ activeProject }) {
             
             {/* Scrollable Content Body */}
             <div className="flex-1 p-6 overflow-y-auto">
+
+              {/* NEW: AI Summary Highlight Box */}
+              {selectedCommit.aiSummary && (
+                <div className="mb-8">
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-2">
+                     AI Generated Summary
+                  </h4>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                    <p className="text-blue-800 dark:text-blue-300 font-medium text-sm">
+                      {selectedCommit.aiSummary}
+                    </p>
+                  </div>
+                </div>
+              )}
               
               <div className="mb-8">
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 uppercase tracking-wider">Commit Message</h4>

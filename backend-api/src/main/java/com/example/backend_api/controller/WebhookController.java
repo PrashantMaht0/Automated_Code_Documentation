@@ -20,6 +20,7 @@ import com.example.backend_api.model.CommitLog;
 import com.example.backend_api.model.Project;
 import com.example.backend_api.repository.CommitLogRepository;
 import com.example.backend_api.repository.ProjectRepository;
+import com.example.backend_api.service.AiService;
 
 @RestController
 @RequestMapping("/api/webhooks")
@@ -27,11 +28,13 @@ public class WebhookController {
 
     private final ProjectRepository projectRepository;
     private final CommitLogRepository commitLogRepository;
+    private final AiService aiService;
 
     @Autowired
-    public WebhookController(ProjectRepository projectRepository, CommitLogRepository commitLogRepository) {
+    public WebhookController(ProjectRepository projectRepository, CommitLogRepository commitLogRepository,AiService aiService) {
         this.projectRepository = projectRepository;
         this.commitLogRepository = commitLogRepository;
+        this.aiService = aiService;
     }
 
     @PostMapping("/github")
@@ -99,6 +102,7 @@ public class WebhookController {
 
                     commitLogRepository.save(newLog);
                     savedCount++;
+                    aiService.generateAndSaveSummary(newLog.getId(), newLog.getRawDiff());
                 }
             }
         }

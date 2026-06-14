@@ -3,6 +3,9 @@ package com.example.backend_api.model;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
@@ -45,10 +48,11 @@ public class CommitLog {
     @Column(name = "ai_summary", columnDefinition = "text")
     private String aiSummary;
 
-    // Add this right below the message or author fields
     @Column(name = "raw_diff", columnDefinition = "text")
     private String rawDiff;
-    // ⚠️ Kept ready for the next phase!
-    // @Column(columnDefinition = "vector")
-    // private float[] embedding;
+
+    @JsonIgnore 
+    @JdbcTypeCode(SqlTypes.VECTOR) 
+    @Column(name = "embedding", columnDefinition = "vector(768)")
+    private float[] embedding;
 }
