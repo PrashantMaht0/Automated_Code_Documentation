@@ -11,7 +11,6 @@ import com.example.backend_api.model.Project;
 
 @Repository
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
-    // This allows us to look up a project by its exact GitHub repository name
     Optional<Project> findByRepoName(String repoName);
     Optional<Project> findByRepoNameAndUserId(String repoName, UUID userId);
     List<Project> findByUserId(UUID userId);

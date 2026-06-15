@@ -43,7 +43,12 @@ function App() {
     const fetchProjects = async () => {
       if (session && session.user) {
         try {
-          const response = await fetch(`http://localhost:8080/api/projects/user/${session.user.id}`);
+          const response = await fetch(`http://localhost:8080/api/projects/user/${session.user.id}`,{
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}` 
+          }
+        });
           if (response.ok) {
             const data = await response.json();
             setProjects(data);
@@ -82,7 +87,7 @@ function App() {
             />
           } />
           <Route path="/dashboard" element={
-            activeProject ? <Dashboard key={activeProject.id} activeProject={activeProject} /> : <Navigate to="/home" replace />
+            activeProject ? <Dashboard key={activeProject.id} activeProject={activeProject} session={session} /> : <Navigate to="/home" replace />
           } />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

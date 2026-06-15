@@ -59,32 +59,24 @@ public class WebhookController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Repository not tracked.");
         }
 
-        // --- NEW DATABASE LOGIC: Process Every Commit Individually ---
         int savedCount = 0;
         RestTemplate restTemplate = new RestTemplate();
 
         if (payload.getCommits() != null) {
             for (GithubPushPayload.Commit commit : payload.getCommits()) {
-                
-                // Only save if we haven't seen this specific commit hash before
                 if (!commitLogRepository.existsByCommitHash(commit.getId())) {
                     CommitLog newLog = new CommitLog();
                     newLog.setProject(trackedProject.get());
                     newLog.setCommitHash(commit.getId());
                     newLog.setMessage(commit.getMessage());
                     
-                    // Prefer username, fallback to display name
                     String authorName = commit.getAuthor().getUsername() != null ? 
                             commit.getAuthor().getUsername() : commit.getAuthor().getName();
                     newLog.setAuthor(authorName);
-                    
-                    // Parse GitHub's ISO-8601 timestamp string into a Java ZonedDateTime
                     newLog.setCommitTimestamp(java.time.ZonedDateTime.parse(commit.getTimestamp()));
 
-                    // --- FETCH RAW CODE DIFF FROM GITHUB ---
                     try {
                         HttpHeaders headers = new HttpHeaders();
-                        // This specific header tells GitHub to return plain text code diffs instead of JSON
                         headers.set("Accept", "application/vnd.github.v3.diff"); 
                         
                         HttpEntity<String> entity = new HttpEntity<>(headers);
@@ -98,7 +90,6 @@ public class WebhookController {
                         System.err.println("Failed to fetch diff for commit " + commit.getId() + ": " + e.getMessage());
                         newLog.setRawDiff("Diff unavailable or repository is private.");
                     }
-                    // ---------------------------------------
 
                     commitLogRepository.save(newLog);
                     savedCount++;

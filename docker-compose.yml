@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # 1. The Local AI Server (Ollama)
+  ollama-ai:
+    image: ollama/ollama:latest
+    container_name: dev-logger-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ai-network
+    # Pull the specific embedding model automatically on startup
+    entrypoint: [ "sh", "-c", "ollama serve & sleep 5 && ollama pull nomic-embed-text && wait" ]
+
+  # 2. Your Spring Boot Backend
+  backend-api:
+    build: .
+    container_name: dev-logger-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Pass secure variables to Spring Boot
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD}
+      # Tell Spring Boot to talk to the Ollama container via the private network
+      - SPRING_AI_OLLAMA_BASE_URL=http://ollama-ai:11434 
+    depends_on:
+      - ollama-ai
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
+
+volumes:
+  ollama_data:

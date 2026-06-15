@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FolderOpen, PlusCircle, Search, ArrowRight, Loader2 } from 'lucide-react';
-import { supabase } from '../services/supabase'; // Import Supabase to get the user ID
+import { supabase } from '../services/supabase'; 
 
 export default function Home({ projects, setProjects, setActiveProject }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false); // New loading state
+  const [isSubmitting, setIsSubmitting] = useState(false); 
   
-  // Form input bindings
   const [newRepoName, setNewRepoName] = useState('');
   const [newSecret, setNewSecret] = useState('');
 
@@ -29,14 +28,12 @@ export default function Home({ projects, setProjects, setActiveProject }) {
     setIsSubmitting(true);
 
     try {
-      // 1. Get the current authenticated user from Supabase
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
         throw new Error("No authenticated user found.");
       }
 
-      // 2. Build the payload matching our Spring Boot DTO
       const payload = {
         userId: user.id,
         email: user.email,
@@ -44,7 +41,6 @@ export default function Home({ projects, setProjects, setActiveProject }) {
         webhookSecret: newSecret || 'wh_generated_' + Math.random().toString(36).substring(7)
       };
 
-      // 3. Send the HTTP POST request to Spring Boot
       const response = await fetch('http://localhost:8080/api/projects', {
         method: 'POST',
         headers: {
@@ -63,10 +59,8 @@ export default function Home({ projects, setProjects, setActiveProject }) {
         throw new Error('Failed to create project on the server.');
       }
 
-      // 4. Parse the newly saved database row
       const savedProject = await response.json();
 
-      // 5. Update React state and navigate
       setProjects([...projects, savedProject]);
       setActiveProject(savedProject);
       navigate('/dashboard');

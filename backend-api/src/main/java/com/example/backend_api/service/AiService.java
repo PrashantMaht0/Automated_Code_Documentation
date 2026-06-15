@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.embedding.EmbeddingModel; // 1. NEW IMPORT
+import org.springframework.ai.embedding.EmbeddingModel; 
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -16,9 +16,8 @@ public class AiService {
 
     private final ChatClient chatClient;
     private final CommitLogRepository commitLogRepository;
-    private final EmbeddingModel embeddingModel; // 2. NEW FIELD
+    private final EmbeddingModel embeddingModel; 
 
-    // 3. UPDATED CONSTRUCTOR
     public AiService(ChatClient.Builder chatClientBuilder, 
                      CommitLogRepository commitLogRepository, 
                      EmbeddingModel embeddingModel) { 
@@ -53,7 +52,6 @@ public class AiService {
         }
     }
 
-    // 4. THE WEBHOOK EMBEDDING GENERATOR
     @Async
     public void generateAndSaveEmbedding(UUID commitLogId, String message, String rawDiff) {
         if (rawDiff == null || rawDiff.isBlank() || rawDiff.equals("Diff unavailable or repository is private.")) {
@@ -76,32 +74,25 @@ public class AiService {
         }
     }
 
-    // 5. THE SMART SEARCH METHOD
     public List<CommitLog> performSmartSearch(UUID projectId, String searchQuery) {
-        // Turn the user's search text into a math vector
-        float[] queryVector = embeddingModel.embed(searchQuery);
         
-        // Convert float[] to the string format PostgreSQL expects: "[0.1, 0.2, ...]"
+        float[] queryVector = embeddingModel.embed(searchQuery);
+
         StringBuilder vectorString = new StringBuilder("[");
         for (int i = 0; i < queryVector.length; i++) {
             vectorString.append(queryVector[i]);
             if (i < queryVector.length - 1) vectorString.append(",");
         }
         vectorString.append("]");
-
-        // Search the database!
         return commitLogRepository.searchBySimilarity(vectorString.toString(), 0.5, 5, projectId);
     }
 
     public void backfillMissingEmbeddings(UUID projectId) {
-        // Fetch all logs for the project
         List<CommitLog> logs = commitLogRepository.findByProjectIdOrderByCommitTimestampDesc(projectId);
         
         int count = 0;
         for (CommitLog log : logs) {
-            // Only process logs that don't have an embedding yet
             if (log.getEmbedding() == null) {
-                // Re-use our existing async method!
                 generateAndSaveEmbedding(log.getId(), log.getMessage(), log.getRawDiff());
                 count++;
             }

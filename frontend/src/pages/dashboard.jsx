@@ -2,30 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { Search, Sparkles, Settings, X, Loader2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
-export default function Dashboard({ activeProject }) {
+export default function Dashboard({ activeProject ,session}) {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const projectName = activeProject?.repo_name || 'Select a Project';
   
-  // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [newSecret, setNewSecret] = useState('');
   const [isUpdatingSecret, setIsUpdatingSecret] = useState(false);
 
-  // Dynamic Logs State
   const [logs, setLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
-  // View Commit Modal State
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const isSearchingRef = React.useRef(false);
 
-  // --- AI Chat State ---
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const chatScrollRef = React.useRef(null); // Keeps chat scrolled to bottom
+  const chatScrollRef = React.useRef(null); 
 
   useEffect(() => {
     setSearchQuery('');
@@ -44,7 +40,12 @@ export default function Dashboard({ activeProject }) {
       }
 
       try {
-        const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`);
+        const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`
+            }
+          });
         if (response.ok) {
           const data = await response.json();
           setLogs(data);
@@ -53,8 +54,8 @@ export default function Dashboard({ activeProject }) {
 
           if (hasPendingSummaries && !intervalId) {
             intervalId = setInterval(() => {
-              fetchLogs(true); // Call recursively in background
-            }, 3000); // Check every 3 seconds
+              fetchLogs(true); 
+            }, 3000); 
           } 
           else if (!hasPendingSummaries && intervalId) {
             clearInterval(intervalId);
@@ -72,7 +73,6 @@ export default function Dashboard({ activeProject }) {
 
     fetchLogs();
 
-    // Clean up the interval if the user switches projects or leaves the page
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -85,7 +85,9 @@ export default function Dashboard({ activeProject }) {
     try {
       const response = await fetch(`http://localhost:8080/api/projects/${activeProject.id}/secret`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'text/plain',
+          'Authorization': `Bearer ${session.access_token}`
+         },
         body: newSecret
       });
 
@@ -113,9 +115,14 @@ export default function Dashboard({ activeProject }) {
 
     isSearchingRef.current = true; 
     setIsLoadingLogs(true);
-    setLogs([]); // Clear logs while searching
+    setLogs([]); 
     try {
-      const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}/search?query=${encodeURIComponent(searchQuery)}`);
+      const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}/search?query=${encodeURIComponent(searchQuery)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setLogs(data); 
@@ -132,7 +139,12 @@ export default function Dashboard({ activeProject }) {
     isSearchingRef.current = false;
     setIsLoadingLogs(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`);
+      const response = await fetch(`http://localhost:8080/api/logs/project/${activeProject.id}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
       if (response.ok) {
         setLogs(await response.json());
       }
@@ -141,24 +153,26 @@ export default function Dashboard({ activeProject }) {
     }
   };
 
-  // 1. Fetch chat history whenever the sidebar is opened
   useEffect(() => {
     if (isAiSidebarOpen && activeProject) {
-      fetch(`http://localhost:8080/api/chat/project/${activeProject.id}`)
+      fetch(`http://localhost:8080/api/chat/project/${activeProject.id}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
         .then(res => res.json())
         .then(data => setChatMessages(data))
         .catch(err => console.error("Failed to load chat history:", err));
     }
   }, [isAiSidebarOpen, activeProject]);
 
-  // 2. Keep chat scrolled to the bottom
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [chatMessages, isChatLoading]);
 
-  // 3. Send a message to the backend
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || !activeProject) return;
@@ -171,7 +185,9 @@ export default function Dashboard({ activeProject }) {
     try {
       const response = await fetch(`http://localhost:8080/api/chat/project/${activeProject.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'text/plain' ,
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: userText
       });
       
@@ -186,7 +202,6 @@ export default function Dashboard({ activeProject }) {
     }
   };
 
-  // 4. Download Markdown Report
   const handleDownloadReport = (content) => {
     const blob = new Blob([content], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
@@ -199,24 +214,19 @@ export default function Dashboard({ activeProject }) {
 
   const handleDownloadPdf = (content) => {
     const doc = new jsPDF();
-    
-    // Set standard font and size
     doc.setFont("helvetica");
     doc.setFontSize(11);
     
-    // Split the markdown text to fit within the PDF width
     const splitText = doc.splitTextToSize(content, 180);
     
-    let yPosition = 15; // Starting vertical position
-    
-    // Loop through the text lines to handle multi-page overflow
+    let yPosition = 15; 
     for (let i = 0; i < splitText.length; i++) {
-      if (yPosition > 280) { // If we hit the bottom of the A4 page
+      if (yPosition > 280) { 
         doc.addPage();
-        yPosition = 15; // Reset to top
+        yPosition = 15; 
       }
       doc.text(splitText[i], 15, yPosition);
-      yPosition += 6; // Line height spacing
+      yPosition += 6; 
     }
     
     doc.save(`AI-Report-${new Date().toISOString().split('T')[0]}.pdf`);

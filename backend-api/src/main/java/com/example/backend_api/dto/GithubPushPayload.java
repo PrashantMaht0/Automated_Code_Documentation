@@ -22,9 +22,9 @@ public class GithubPushPayload {
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Commit {
-        private String id;        // The commit hash
-        private String message;   // The commit message
-        private String timestamp; // When it happened
+        private String id;        
+        private String message;   
+        private String timestamp; 
         private Author author;
     }
 

@@ -2,7 +2,6 @@ package com.example.backend_api.controller;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -14,7 +13,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
 
 import com.example.backend_api.dto.ProjectRequest;
 import com.example.backend_api.model.Project;
@@ -69,16 +67,11 @@ public class ProjectController {
             return userRepository.save(newUser);
         });
 
-        // 2. Create and configure the new Project
         Project project = new Project();
         project.setUser(user);
         project.setRepoName(request.getRepoName());
         project.setWebhookSecret(request.getWebhookSecret());
-        
-        // FIX: Provide a default value for the NON-NULLABLE github_installation_id column
         project.setGithubInstallationId(0L); 
-
-        // 3. Save to database and return the created object to React
         Project savedProject = projectRepository.save(project);
         
         return ResponseEntity.ok(savedProject);

@@ -1,9 +1,15 @@
 package com.example.backend_api.model;
 
-import jakarta.persistence.*;
-import lombok.Data;
 import java.time.ZonedDateTime;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Data;
 
 @Entity
 @Table(name = "chat_messages")
@@ -17,7 +23,6 @@ public class ChatMessage {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
-    // Will be either "USER" or "ASSISTANT"
     @Column(nullable = false)
     private String role;
 

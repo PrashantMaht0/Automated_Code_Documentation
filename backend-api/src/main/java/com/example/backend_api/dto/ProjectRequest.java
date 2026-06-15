@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class ProjectRequest {
     private UUID userId;
-    private String email; // Fallback in case we need to create the user on the fly
+    private String email; 
     private String repoName;
     private String webhookSecret;
 }

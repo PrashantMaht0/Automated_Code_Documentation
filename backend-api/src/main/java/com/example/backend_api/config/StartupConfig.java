@@ -16,7 +16,6 @@ public class StartupConfig {
         return args -> {
             System.out.println("Server started. Checking for missing embeddings...");
             
-            // Assuming you want to loop through all projects to check for missing data
             projectRepository.findAll().forEach(project -> {
                 aiService.backfillMissingEmbeddings(project.getId());
             });

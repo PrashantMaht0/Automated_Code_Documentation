@@ -34,7 +34,6 @@ public class CommitLogController {
         return ResponseEntity.ok(logs);
     }
 
-    // --- NEW: Smart Search Endpoint ---
     @GetMapping("/project/{projectId}/search")
     public ResponseEntity<List<CommitLog>> searchLogs(
             @PathVariable UUID projectId,

@@ -12,10 +12,9 @@ import com.example.backend_api.model.CommitLog;
 
 @Repository
 public interface CommitLogRepository extends JpaRepository<CommitLog, UUID> {
-    // Fetches logs for the dashboard, newest first
+    
     List<CommitLog> findByProjectIdOrderByCommitTimestampDesc(UUID projectId);
     
-    // Safety check to prevent saving the same commit twice
     boolean existsByCommitHash(String commitHash);
 
     @Query(value = "SELECT * FROM match_commit_logs(cast(:queryEmbedding as vector), :threshold, :limit, cast(:projectId as uuid))", nativeQuery = true)

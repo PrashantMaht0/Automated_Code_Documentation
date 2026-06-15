@@ -27,3 +27,11 @@ dist-ssr
 *.sw?
 .env
 target/
+eslint.config.js
+package-lock.json
+package.json
+vite.config.js
+mvnw
+mvnw.cmd
+
+application.properties
